@@ -592,17 +592,29 @@ function bindPanel() {
 
 // ---------- 1-ekran ----------
 const natural = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+// Rasmni bitmapga aylantirish: avval createImageBitmap, bo'lmasa <img> orqali
+async function toBmp(f) {
+  try { return await createImageBitmap(f); } catch (e) { /* zaxira usul */ }
+  const url = URL.createObjectURL(f);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
+    return await createImageBitmap(c);
+  } finally { URL.revokeObjectURL(url); }
+}
 async function addImages(files) {
   busy(true, 'Rasmlar yuklanmoqda...');
-  const arr = [...files].filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(f.name)).sort(natural);
+  const arr = [...files].sort(natural); let bad = 0;
   for (const f of arr) {
     try {
-      const b = await createImageBitmap(f, { resizeWidth: 240, resizeQuality: 'medium' });
-      const c = document.createElement('canvas'); c.width = b.width; c.height = b.height; c.getContext('2d').drawImage(b, 0, 0); if (b.close) b.close();
+      const b = await toBmp(f);
+      const sc = Math.min(1, 240 / b.width);
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(b.width * sc)); c.height = Math.max(1, Math.round(b.height * sc)); c.getContext('2d').drawImage(b, 0, 0, c.width, c.height); if (b.close) b.close();
       S.images.push({ file: f, name: f.name, thumb: c.toDataURL('image/jpeg', 0.72) });
-    } catch (e) { /* rasm emas */ }
+    } catch (e) { bad++; }
   }
   busy(false); drawGrid(); check();
+  if (bad) alert(bad + ' ta fayl rasm sifatida ochilmadi (format qo\'llab-quvvatlanmaydi).');
 }
 function drawGrid() {
   const g = $('#grid'); g.innerHTML = '';
@@ -641,7 +653,7 @@ async function toEditor() {
   BMP.forEach((b) => { try { b.close(); } catch (e) { /* yopilgan */ } }); BMP = [];
   try {
     for (const im of S.images) {
-      const probe = await createImageBitmap(im.file);
+      const probe = await toBmp(im.file);
       const need = Math.max(W / probe.width, H / probe.height) * 1.2;
       if (need >= 1) BMP.push(probe);
       else { BMP.push(await createImageBitmap(probe, { resizeWidth: Math.round(probe.width * need), resizeHeight: Math.round(probe.height * need), resizeQuality: 'high' })); probe.close(); }
