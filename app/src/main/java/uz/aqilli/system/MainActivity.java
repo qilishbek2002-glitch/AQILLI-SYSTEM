@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 ArrayList<String> types = new ArrayList<>();
                 String[] accept = params.getAcceptTypes();
                 if (accept != null) {
@@ -85,7 +86,20 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_FILE && chooserCallback != null) {
-            Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            Uri[] result = null;
+            if (resultCode == RESULT_OK && data != null) {
+                ArrayList<Uri> list = new ArrayList<>();
+                if (data.getClipData() != null) {
+                    for (int i = 0; i < data.getClipData().getItemCount(); i++) {
+                        Uri u = data.getClipData().getItemAt(i).getUri();
+                        if (u != null) list.add(u);
+                    }
+                }
+                if (list.isEmpty() && data.getData() != null) list.add(data.getData());
+                if (!list.isEmpty()) result = list.toArray(new Uri[0]);
+            }
+            if (result == null) result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            android.widget.Toast.makeText(this, "Tanlandi: " + (result == null ? 0 : result.length) + " ta fayl", android.widget.Toast.LENGTH_SHORT).show();
             chooserCallback.onReceiveValue(result);
             chooserCallback = null;
         }
