@@ -1,9 +1,12 @@
-name: APK yig'ish
+name: Build APK
 
 on:
   push:
     branches: [main, master]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -11,23 +14,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Maxfiy so'z (faqat pullik rejimda kerak)
+        env:
+          ACTIVATION_SECRET: ${{ secrets.ACTIVATION_SECRET }}
+        run: |
+          if [ -z "$ACTIVATION_SECRET" ]; then
+            echo "::warning::ACTIVATION_SECRET kiritilmagan. Ilova bepul rejimda bu kerak emas. Obunani yoqmoqchi bo'lsangiz: Settings -> Secrets and variables -> Actions -> New repository secret"
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: subosito/flutter-action@v2
         with:
-          gradle-version: '8.7'
+          channel: stable
+          cache: true
 
-      - name: Android litsenziyalarini qabul qilish
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Android loyihasini yaratish
+        run: |
+          flutter create --platforms=android --org uz.abituriyent --project-name abituriyent_test .
+          rm -f test/widget_test.dart
+          python3 tools/patch_android.py
+
+      - name: Paketlarni yuklash
+        run: flutter pub get
+
+      - name: Kodni tekshirish (xato bo'lsa ham davom etadi)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
       - name: APK yig'ish
-        run: gradle assembleDebug --no-daemon --stacktrace
+        env:
+          ACTIVATION_SECRET: ${{ secrets.ACTIVATION_SECRET }}
+        run: flutter build apk --release --dart-define=ACTIVATION_SECRET="$ACTIVATION_SECRET"
 
-      - name: APK ni yuklab olishga qo'yish
+      - name: APK ni saqlash (Actions -> Artifacts)
         uses: actions/upload-artifact@v4
         with:
-          name: AQILLI-SYSTEM-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: abituriyent-test-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Releases bo'limiga qo'yish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: APK build ${{ github.run_number }}
+          files: build/app/outputs/flutter-apk/app-release.apk
